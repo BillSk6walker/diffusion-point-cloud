@@ -2,6 +2,9 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+"""
+From https://github.com/luost26/diffusion-point-cloud
+"""
 
 class PointNetEncoder(nn.Module):
     def __init__(self, zdim, input_dim=3):

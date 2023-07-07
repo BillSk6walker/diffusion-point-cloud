@@ -5,7 +5,9 @@ import random
 import numbers
 import random
 from itertools import repeat
-
+"""
+From https://github.com/luost26/diffusion-point-cloud
+"""
 
 class Center(object):
     r"""Centers node positions around the origin."""

@@ -1,3 +1,7 @@
+"""
+From https://github.com/luost26/diffusion-point-cloud
+"""
+
 import torch
 from torch.nn import Module
 
@@ -61,10 +65,8 @@ class FlowVAE(Module):
 
         return loss
 
-    def sample(self, w, num_points, flexibility, truncate_std=None):
+    def sample(self, w, num_points, flexibility):
         batch_size, _ = w.size()
-        if truncate_std is not None:
-            w = truncated_normal_(w, mean=0, std=1, trunc_std=truncate_std)
         # Reverse: z <- w.
         z = self.flow(w, reverse=True).view(batch_size, -1)
         samples = self.diffusion.sample(num_points, context=z, flexibility=flexibility)

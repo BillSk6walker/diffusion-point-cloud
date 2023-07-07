@@ -1,3 +1,7 @@
+"""
+From https://github.com/luost26/diffusion-point-cloud
+"""
+
 import os
 import torch
 import numpy as np
@@ -5,6 +9,7 @@ import random
 import time
 import logging
 import logging.handlers
+
 
 THOUSAND = 1000
 MILLION = 1000000

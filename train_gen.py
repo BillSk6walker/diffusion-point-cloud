@@ -10,16 +10,15 @@ from tqdm.auto import tqdm
 from utils.dataset import *
 from utils.misc import *
 from utils.data import *
-from models.vae_gaussian import *
 from models.vae_flow import *
-from models.flow import add_spectral_norm, spectral_norm_power_iteration
 from evaluation import *
-
+"""
+From https://github.com/luost26/diffusion-point-cloud
+"""
 
 # Arguments
 parser = argparse.ArgumentParser()
 # Model arguments
-parser.add_argument('--model', type=str, default='flow', choices=['flow', 'gaussian'])
 parser.add_argument('--latent_dim', type=int, default=256)
 parser.add_argument('--num_steps', type=int, default=100)
 parser.add_argument('--beta_1', type=float, default=1e-4)
@@ -33,7 +32,6 @@ parser.add_argument('--num_samples', type=int, default=4)
 parser.add_argument('--sample_num_points', type=int, default=2048)
 parser.add_argument('--kl_weight', type=float, default=0.001)
 parser.add_argument('--residual', type=eval, default=True, choices=[True, False])
-parser.add_argument('--spectral_norm', type=eval, default=False, choices=[True, False])
 
 # Datasets and loaders
 parser.add_argument('--dataset_path', type=str, default='./data/shapenet.hdf5')
@@ -51,8 +49,7 @@ parser.add_argument('--sched_start_epoch', type=int, default=200*THOUSAND)
 parser.add_argument('--sched_end_epoch', type=int, default=400*THOUSAND)
 
 # Training
-parser.add_argument('--seed', type=int, default=2020)
-parser.add_argument('--logging', type=eval, default=True, choices=[True, False])
+parser.add_argument('--seed', type=int, default=2023)
 parser.add_argument('--log_root', type=str, default='./logs_gen')
 parser.add_argument('--device', type=str, default='cuda')
 parser.add_argument('--max_iters', type=int, default=float('inf'))
@@ -60,20 +57,15 @@ parser.add_argument('--val_freq', type=int, default=1000)
 parser.add_argument('--test_freq', type=int, default=30*THOUSAND)
 parser.add_argument('--test_size', type=int, default=400)
 parser.add_argument('--tag', type=str, default=None)
-args = parser.parse_args()
+args = parser.parse_args() # all the arguments are stored in the args
 seed_all(args.seed)
 
-# Logging
-if args.logging:
-    log_dir = get_new_log_dir(args.log_root, prefix='GEN_', postfix='_' + args.tag if args.tag is not None else '')
-    logger = get_logger('train', log_dir)
-    writer = torch.utils.tensorboard.SummaryWriter(log_dir)
-    ckpt_mgr = CheckpointManager(log_dir)
-    log_hyperparams(writer, args)
-else:
-    logger = get_logger('train', None)
-    writer = BlackHole()
-    ckpt_mgr = BlackHole()
+# Logging part --- not important ---
+log_dir = get_new_log_dir(args.log_root, prefix='GEN_', postfix='_' + args.tag if args.tag is not None else '')
+logger = get_logger('train', log_dir)
+writer = torch.utils.tensorboard.SummaryWriter(log_dir)
+ckpt_mgr = CheckpointManager(log_dir)
+log_hyperparams(writer, args)
 logger.info(args)
 
 # Datasets and loaders
@@ -99,13 +91,8 @@ train_iter = get_data_iterator(DataLoader(
 
 # Model
 logger.info('Building model...')
-if args.model == 'gaussian':
-    model = GaussianVAE(args).to(args.device)
-elif args.model == 'flow':
-    model = FlowVAE(args).to(args.device)
-logger.info(repr(model))
-if args.spectral_norm:
-    add_spectral_norm(model, logger=logger)
+model = FlowVAE(args).to(args.device)
+# logger.info(repr(model)) representing the model not needed
 
 # Optimizer and scheduler
 optimizer = torch.optim.Adam(model.parameters(), 
@@ -120,7 +107,7 @@ scheduler = get_linear_scheduler(
     end_lr=args.end_lr
 )
 
-# Train, validate and test
+# train, validate and test
 def train(it):
     # Load data
     batch = next(train_iter)
@@ -129,8 +116,6 @@ def train(it):
     # Reset grad and model state
     optimizer.zero_grad()
     model.train()
-    if args.spectral_norm:
-        spectral_norm_power_iteration(model, n_power_iterations=1)
 
     # Forward
     kl_weight = args.kl_weight
@@ -189,37 +174,38 @@ def test(it):
     writer.add_scalar('test/Coverage_CD', results['lgan_cov-CD'], global_step=it)
     writer.add_scalar('test/MMD_CD', results['lgan_mmd-CD'], global_step=it)
     writer.add_scalar('test/1NN_CD', results['1-NN-CD-acc'], global_step=it)
-    # EMD related metrics
-    # writer.add_scalar('test/Coverage_EMD', results['lgan_cov-EMD'], global_step=it)
-    # writer.add_scalar('test/MMD_EMD', results['lgan_mmd-EMD'], global_step=it)
-    # writer.add_scalar('test/1NN_EMD', results['1-NN-EMD-acc'], global_step=it)
     # JSD
     writer.add_scalar('test/JSD', results['jsd'], global_step=it)
-
-    # logger.info('[Test] Coverage  | CD %.6f | EMD %.6f' % (results['lgan_cov-CD'], results['lgan_cov-EMD']))
-    # logger.info('[Test] MinMatDis | CD %.6f | EMD %.6f' % (results['lgan_mmd-CD'], results['lgan_mmd-EMD']))
-    # logger.info('[Test] 1NN-Accur | CD %.6f | EMD %.6f' % (results['1-NN-CD-acc'], results['1-NN-EMD-acc']))
-    logger.info('[Test] Coverage  | CD %.6f | EMD n/a' % (results['lgan_cov-CD'], ))
-    logger.info('[Test] MinMatDis | CD %.6f | EMD n/a' % (results['lgan_mmd-CD'], ))
-    logger.info('[Test] 1NN-Accur | CD %.6f | EMD n/a' % (results['1-NN-CD-acc'], ))
+    logger.info('[Test] Coverage  | CD %.6f' % (results['lgan_cov-CD'], ))
+    logger.info('[Test] MinMatDis | CD %.6f' % (results['lgan_mmd-CD'], ))
+    logger.info('[Test] 1NN-Accur | CD %.6f' % (results['1-NN-CD-acc'], ))
     logger.info('[Test] JsnShnDis | %.6f ' % (results['jsd']))
 
-# Main loop
+# Main loop --- the loop to do the train job ---
 logger.info('Start training...')
 try:
-    it = 1
-    while it <= args.max_iters:
-        train(it)
-        if it % args.val_freq == 0 or it == args.max_iters:
-            validate_inspect(it)
-            opt_states = {
-                'optimizer': optimizer.state_dict(),
-                'scheduler': scheduler.state_dict(),
-            }
-            ckpt_mgr.save(model, args, 0, others=opt_states, step=it)
-        if it % args.test_freq == 0 or it == args.max_iters:
-            test(it)
-        it += 1
-
+    # it = 1
+    # while it <= args.max_iters:
+    #     train(it)
+    #     if it % args.val_freq == 0 or it == args.max_iters:
+    #         validate_inspect(it)
+    #         opt_states = {
+    #             'optimizer': optimizer.state_dict(),
+    #             'scheduler': scheduler.state_dict(),
+    #         }
+    #         ckpt_mgr.save(model, args, 0, others=opt_states, step=it)
+    #     if it % args.test_freq == 0 or it == args.max_iters: # the end of training, test before stopping 
+    #         test(it)
+    #     it += 1
+    i = 1
+    while i > 0:
+        train(i)
 except KeyboardInterrupt:
+    validate_inspect(i)
+    opt_states = {
+        'optimizer': optimizer.state_dict(),
+        'scheduler': scheduler.state_dict(),
+    }
+    ckpt_mgr.save(model, args, 0, others=opt_states, step=i)
+    test(i)
     logger.info('Terminating...')

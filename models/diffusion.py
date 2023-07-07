@@ -1,3 +1,7 @@
+"""
+From https://github.com/luost26/diffusion-point-cloud
+"""
+
 import torch
 import torch.nn.functional as F
 from torch.nn import Module, Parameter, ModuleList
